@@ -1,0 +1,49 @@
+# OS / Editor
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*.tmp
+*.log
+
+# Node / npm / yarn (if used)
+node_modules/
+npm-debug.log*
+
+# Gradle
+.gradle/
+**/build/
+!android/app/src/**/build.gradle
+
+# Android Studio / IntelliJ
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# APK / AAB outputs
+*.apk
+*.aab
+
+# Local environment files
+.env
+.env.local
+
+# macOS metadata
+**/.DS_Store
+
+# Docker
+*.pid
+*.seed
+docker-compose.override.yml
+
+# Generated JNI libs (optional if you build them locally)
+android/app/src/main/jniLibs/
+
+# Java / Kotlin build output
+**/out/
+**/classes/
+**/generated/
+
+# Backup files
+*~
