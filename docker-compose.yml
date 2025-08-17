@@ -1,0 +1,26 @@
+services:
+  build_android:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        BUILD_VARIANT: Release
+    image: rn-video-editor:prod
+
+    environment:
+      # Signing (optional for CI) – store in .env (never commit)
+      - ANDROID_KEYSTORE_PASSWORD=${ANDROID_KEYSTORE_PASSWORD}
+      - ANDROID_KEY_ALIAS=${ANDROID_KEY_ALIAS}
+      - ANDROID_KEY_PASSWORD=${ANDROID_KEY_PASSWORD}
+
+    volumes:
+      # Project root
+      - ./:/app:rw
+      # External Whisper C++ sources (mounted over stub folder)
+      # Change the left side to your real local path
+      - ${WHISPER_CPP_PATH:-~/dev/whisper-cpp-src}:/app/android/app/src/main/cpp:ro
+
+    env_file:
+      - .env
+
+    command: ["/bin/bash", "-lc", "bash scripts/entrypoint.sh"]

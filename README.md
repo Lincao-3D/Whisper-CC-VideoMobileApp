@@ -1,3 +1,4 @@
+<!-- This README is generated. Do not edit directly. -->
 # Autocap Mobile
 
 Autocap Mobile is a cross‑platform mobile application built with **React Native** and packaged with a reproducible **Docker** toolchain.  

@@ -1,0 +1,33 @@
+# GitHub Actions configuration
+
+```yaml
+name: Build Android
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t autocap-mobile .
+
+      - name: Build APK & AAB
+        run: |
+          docker run --rm \
+            -v ${{ github.workspace }}:/app \
+            -v ${{ github.workspace }}/fonts:/app/fonts \
+            autocap-mobile \
+            bash -c "./scripts/build-release-apk.sh && ./scripts/build-release-aab.sh"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-builds
+          path: artifacts/
