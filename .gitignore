@@ -44,6 +44,10 @@ android/app/src/main/jniLibs/
 **/out/
 **/classes/
 **/generated/
+/openjdk-15.0.2_linux-x64_bin.tar.gz
+
+# git-related
+/.githooks
 
 # Backup files
 *~
