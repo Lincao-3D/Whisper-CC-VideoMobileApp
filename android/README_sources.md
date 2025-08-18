@@ -1,1 +1,18 @@
-﻿# Whisper C++ SourcesThis folder contains **stub** source files (`whisper_stub.cpp`, `ggml_stub.c`) to satisfy the Android Gradle/CMake build when the real Whisper sources are not mounted.## Real Source LocationThe actual implementation files (`whisper.cpp`, `ggml.c`, and related headers) are not committed to this repository.  They must be obtained from the private/internal repository or local path:<!-- extracted from whisper_stub.cpp to avoid link errors:// Stub file â€” actual whisper.cpp is mounted in build// ## How to Use in Local Builds// Mount the real sources over these stubs when running Docker:// ```bash// docker run --rm \//   -v "$(pwd)":/app \//   -v /path/to/your/whisper-cpp-src:/app/android/app/src/main/cpp:ro \//   autocap-mobile bash -c "./scripts/build-release-apk.sh" -->
+# Whisper C++ Sources
+
+This folder contains **stub** source files (`whisper_stub.cpp`, `ggml_stub.c`) to satisfy the Android Gradle/CMake build when the real Whisper sources are not mounted.
+
+## Real Source Location
+The actual implementation files (`whisper.cpp`, `ggml.c`, and related headers) are **not** committed to this repository.  
+They must be obtained from the private/internal repository or a local path.
+
+---
+
+## Using the Real Sources in Local Builds
+Mount the real sources over these stubs when running Docker:
+
+```bash
+docker run --rm \
+  -v "$(pwd)":/app \
+  -v /path/to/your/whisper-cpp-src:/app/android/app/src/main/cpp:ro \
+  autocap-mobile bash -c "./scripts/build-release-apk.sh"
