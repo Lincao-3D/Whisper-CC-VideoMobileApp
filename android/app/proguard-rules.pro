@@ -1,5 +1,1 @@
--keep class com.arthenica.** { *; }
--keep class org.tensorflow.** { *; }
--keep class ai.onnxruntime.** { *; }
--keep class com.facebook.hermes.** { *; }
--dontwarn javax.annotation.**
+﻿-keep class com.arthenica.** { *; }-keep class org.tensorflow.** { *; }-keep class ai.onnxruntime.** { *; }-keep class com.facebook.hermes.** { *; }-dontwarn javax.annotation.**

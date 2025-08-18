@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 3.10.2)
 project(whisper)
 
+if (NOT EXISTS "${CMAKE_SOURCE_DIR}/../assets/models/ggml-small.bin")
+    message(FATAL_ERROR "Missing Whisper model file in assets/models/")
+endif()
+
 add_library(whisper SHARED
     whisper.cpp
     ggml.c

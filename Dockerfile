@@ -48,7 +48,9 @@ RUN sdkmanager \
   "cmake;${CMAKE_VERSION}"
 
 # Non-root user for builds
-RUN useradd -ms /bin/bash builder && mkdir -p /home/builder && chown -R builder:builder /home/builder /opt/.gradle
+RUN useradd -ms /bin/bash builder && \
+    mkdir -p /home/builder /opt/.gradle && \
+    chown -R builder:builder /home/builder /opt/.gradle
 USER builder
 WORKDIR /app
 
@@ -56,14 +58,28 @@ WORKDIR /app
 # 2) Build dependencies (JS + Gradle caches)
 ############################################
 FROM toolchain AS deps
-COPY --chown=builder:builder package.json yarn.lock .
-RUN yarn install --frozen-lockfile --production=false
+
+# Copy package manifest and any lockfiles
+COPY --chown=builder:builder package.json yarn.lock* package-lock.json* ./
+
+# Install dependencies based on lockfile type
+RUN if [ -f yarn.lock ]; then \
+      echo "📦 Using Yarn (lockfile detected)" && \
+      yarn install --frozen-lockfile --production=false; \
+    elif [ -f package-lock.json ]; then \
+      echo "📦 Using npm (lockfile detected)" && \
+      npm ci; \
+    else \
+      echo "⚠️  No lockfile found — using npm install (non‑deterministic)" && \
+      npm install; \
+    fi
 
 # Pre-warm Gradle wrapper & caches (copy minimal android files)
 COPY --chown=builder:builder android/gradle android/gradle
 COPY --chown=builder:builder android/gradle.properties android/gradle.properties
 COPY --chown=builder:builder android/gradlew android/gradlew
 RUN chmod +x android/gradlew && mkdir -p android/.gradle
+
 
 ############################################
 # 3) App build stage (release)

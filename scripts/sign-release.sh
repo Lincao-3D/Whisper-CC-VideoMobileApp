@@ -3,6 +3,7 @@ set -euo pipefail
 
 # Expect keystore mounted/copied at android/app/signing/release.keystore
 KS_PATH="android/app/signing/release.keystore"
+
 if [[ -f "$KS_PATH" ]]; then
   echo "Using release keystore at $KS_PATH"
 else

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+
 cd android
 chmod +x ./gradlew
 ./gradlew clean bundleRelease --no-daemon --stacktrace

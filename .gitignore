@@ -46,6 +46,9 @@ android/app/src/main/jniLibs/
 **/generated/
 /openjdk-15.0.2_linux-x64_bin.tar.gz
 
+# Whisper model weights (too large for Git)
+android/app/src/main/assets/models/ggml-small.bin
+
 # git-related
 /.githooks
 
