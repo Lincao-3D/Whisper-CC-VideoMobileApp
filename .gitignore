@@ -46,6 +46,8 @@ android/app/src/main/jniLibs/
 **/generated/
 /openjdk-15.0.2_linux-x64_bin.tar.gz
 android/gradle-6.8.3-bin.zip
+android/gradle-8.8-bin.zip
+
 # Whisper model weights (too large for Git)
 android/app/src/main/assets/models/ggml-small.bin
 
