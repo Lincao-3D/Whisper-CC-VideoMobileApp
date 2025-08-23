@@ -86,15 +86,17 @@ RUN --mount=type=cache,target=/home/builder/.cache/yarn \
     --mount=type=cache,target=/home/builder/.npm \
     yarn install --immutable
 
-# sanity checks (using yarn why instead of yarn list)
+# Sanity checks
 RUN yarn config get nodeLinker \
     && yarn why react-native \
     && test -d node_modules/react-native/android \
     && ls -la node_modules/react-native/android
 
 # DEBUG: find the real wrapper location
-# RUN find /app/node_modules/react-native -type f -name gradle-wrapper.properties -exec dirname {} \;
+RUN WRAPPER_PATH=$(find /app/node_modules/react-native -type f -name gradle-wrapper.properties -exec dirname {} \;) && \
+    echo "Found wrapper location: $WRAPPER_PATH"
 
+RUN ./gradlew wrapper --gradle-version 8.7
 ############################################
 # 3) Build app
 ############################################
@@ -112,27 +114,22 @@ COPY --chown=builder:builder ./app      /app/app
 COPY --chown=builder:builder ./scripts  /app/scripts
 COPY --chown=builder:builder ./package.json /app/package.json
 
-# 3) Materialize the Gradle plugin
+# 3) Materialize the RN Gradle plugin folder expected by settings.gradle
 COPY --from=deps --chown=builder:builder \
   /app/node_modules/@react-native/gradle-plugin \
   /app/node_modules/react-native-gradle-plugin
 
-# 4) Ensure wrapper folder exists, then copy the actual wrapper file
-RUN mkdir -p /app/android/gradle/wrapper
-COPY --from=deps --chown=builder:builder \
-  /app/node_modules/react-native/ReactAndroid/gradle/wrapper/gradle-wrapper.properties \
-  /app/android/gradle/wrapper/gradle-wrapper.properties
-
-# 5) Patch wrapper to use Gradle 8.7 distribution
-RUN sed -i \
-  's@^distributionUrl=.*@distributionUrl=https\://services.gradle.org/distributions/gradle-8.7-all.zip@' \
-  /app/android/gradle/wrapper/gradle-wrapper.properties
-
+# Navigate to the Android directory
 WORKDIR /app/android
-RUN chmod +x gradlew
 
-# 6) Clean and build using the updated wrapper
-RUN ./gradlew clean --no-daemon --stacktrace --info
+# 4) Generate a fresh wrapper at the required Gradle version
+#    (uses system Gradle just for this step)
+RUN gradle --no-daemon wrapper --gradle-version 8.7 --distribution-type all
+
+# 5) Use the wrapper from here on out
+RUN chmod +x gradlew \
+ && ./gradlew --version \
+ && ./gradlew clean --no-daemon --stacktrace --info
 
 # AAB
 RUN --mount=type=cache,target=/home/builder/.gradle/wrapper,uid=1000,gid=1000,mode=0775 \
