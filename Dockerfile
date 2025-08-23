@@ -1,11 +1,9 @@
 # syntax=docker/dockerfile:1.7
 
-
 ############################################
 # 1) Toolchain base (OpenJDK 17 slim)
 ############################################
 FROM openjdk:17-jdk-slim AS toolchain
-
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG ANDROID_SDK_VERSION=13114758
@@ -15,21 +13,17 @@ ARG ANDROID_NDK_VERSION=25.2.9519653
 ARG CMAKE_VERSION=3.22.1
 ARG NODE_VERSION=18.20.8
 
-
 ENV ANDROID_SDK_ROOT=/opt/android-sdk \
     ANDROID_HOME=/opt/android-sdk \
     GRADLE_USER_HOME=/home/builder/.gradle \
     PATH=/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
-
 SHELL ["/bin/bash", "-euxo", "pipefail", "-c"]
-
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates curl wget unzip zip git bash coreutils findutils \
       make cmake ninja-build python3 xz-utils dumb-init \
     && rm -rf /var/lib/apt/lists/*
-
 
 # Node + Yarn (Berry)
 RUN cd /tmp && \
@@ -38,9 +32,7 @@ RUN cd /tmp && \
     tar -xf node.tar.gz -C /usr/local --strip-components=1 && rm -f node.tar.gz && \
     corepack enable && corepack prepare yarn@3.2.0 --activate
 
-
 ENV CMDLINE_TOOLS_ZIP=commandlinetools-linux-${ANDROID_SDK_VERSION}_latest.zip
-
 
 # Android SDK commandline tools
 RUN mkdir -p "${ANDROID_SDK_ROOT}/cmdline-tools" && \
@@ -50,21 +42,17 @@ RUN mkdir -p "${ANDROID_SDK_ROOT}/cmdline-tools" && \
     mv "${ANDROID_SDK_ROOT}/cmdline-tools/cmdline-tools" "${ANDROID_SDK_ROOT}/cmdline-tools/latest" && \
     rm -f "${CMDLINE_TOOLS_ZIP}"
 
-
 # Non-root user
 RUN useradd -ms /bin/bash builder && \
     mkdir -p /home/builder/.gradle /home/builder/.android /home/builder/.cache && \
     chown -R builder:builder /home/builder
 
-
 USER builder
 WORKDIR /app
-
 
 # Accept licenses
 RUN --mount=type=cache,target=/home/builder/.android/cache \
     set +o pipefail && sdkmanager --sdk_root="${ANDROID_SDK_ROOT}" --licenses
-
 
 # Install required SDK components
 RUN --mount=type=cache,target=/opt/android-sdk/.android/cache \
@@ -74,7 +62,6 @@ RUN --mount=type=cache,target=/opt/android-sdk/.android/cache \
       "build-tools;${ANDROID_BUILD_TOOLS}" \
       "ndk;${ANDROID_NDK_VERSION}" \
       "cmake;${CMAKE_VERSION}"
-
 
 ############################################
 # 2) JS dependencies (cache-friendly)
@@ -105,6 +92,8 @@ RUN yarn config get nodeLinker \
     && test -d node_modules/react-native/android \
     && ls -la node_modules/react-native/android
 
+# DEBUG: find the real wrapper location
+RUN find /app/node_modules/react-native -type f -name gradle-wrapper.properties -exec dirname {} \;
 
 ############################################
 # 3) Build app
@@ -114,34 +103,33 @@ FROM toolchain AS build
 USER builder
 WORKDIR /app
 
-# 1) Bring in the full JS install (with node_modules + plugin)
+# 1) JS + node_modules
 COPY --from=deps --chown=builder:builder /app /app
 
-# 2) Copy your native sources (minus wrapper file, if missing locally)
-COPY --chown=builder:builder ./android /app/android
-COPY --chown=builder:builder ./app     /app/app
-COPY --chown=builder:builder ./scripts /app/scripts
+# 2) Your native folders
+COPY --chown=builder:builder ./android  /app/android
+COPY --chown=builder:builder ./app      /app/app
+COPY --chown=builder:builder ./scripts  /app/scripts
 COPY --chown=builder:builder ./package.json /app/package.json
 
-# 3) Replace the symbolic link with a direct copy
+# 3) Materialize the Gradle plugin
 COPY --from=deps --chown=builder:builder \
-    /app/node_modules/@react-native/gradle-plugin \
-    /app/node_modules/react-native-gradle-plugin
+  /app/node_modules/@react-native/gradle-plugin \
+  /app/node_modules/react-native-gradle-plugin
 
-# 4) Ensure gradle-wrapper.properties exists by copying from deps stage
-#    (React Native ships its own wrapper inside node_modules)
+# 4) Copy the *actual* wrapper from React Native’s ReactAndroid folder
+RUN mkdir -p /app/android/gradle/wrapper
+
 COPY --from=deps --chown=builder:builder \
-    /app/node_modules/react-native/android/gradle/wrapper/gradle-wrapper.properties \
-    /app/android/gradle/wrapper/gradle-wrapper.properties
+  /app/node_modules/react-native/android/gradle/wrapper/gradle-wrapper.properties \
+  /app/android/gradle/wrapper/gradle-wrapper.properties
 
-# 5) Patch the wrapper to use Gradle 8.7
+# 5) Patch to Gradle 8.7
 RUN sed -i \
   's@^distributionUrl=.*@distributionUrl=https\://services.gradle.org/distributions/gradle-8.7-all.zip@' \
-  android/gradle/wrapper/gradle-wrapper.properties
+  /app/android/gradle/wrapper/gradle-wrapper.properties
 
 WORKDIR /app/android
-
-# 5) Ensure the wrapper is executable
 RUN chmod +x gradlew
 
 # 6) Clean & build with the now-fixed wrapper
@@ -170,8 +158,6 @@ RUN find /home/builder/.gradle/daemon -type f -name 'daemon-*.out.log' \
 
 # Inspect
 RUN ls -lah /app/android/artifacts
-
-
 
 ############################################
 # 4) Final artifacts
