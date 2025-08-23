@@ -1,110 +1,140 @@
 # syntax=docker/dockerfile:1.7
 
 ############################################
-# 1) Base toolchain image
+# 1) Toolchain base (OpenJDK 17 slim)
 ############################################
-FROM eclipse-temurin:17-jdk-jammy AS toolchain
+FROM openjdk:17-jdk-slim AS toolchain
 
-# Pinned versions for determinism
-ARG NODE_VER=18.20.3
-ARG ANDROID_SDK_VERSION=11076708
+ARG DEBIAN_FRONTEND=noninteractive
+ARG ANDROID_SDK_VERSION=13114758
 ARG ANDROID_PLATFORM=android-34
 ARG ANDROID_BUILD_TOOLS=34.0.0
 ARG ANDROID_NDK_VERSION=25.2.9519653
 ARG CMAKE_VERSION=3.22.1
+ARG NODE_VERSION=18.20.8
 
-ENV DEBIAN_FRONTEND=noninteractive \
-    ANDROID_SDK_ROOT=/opt/android-sdk \
+ENV ANDROID_SDK_ROOT=/opt/android-sdk \
     ANDROID_HOME=/opt/android-sdk \
-    GRADLE_USER_HOME=/opt/.gradle
+    GRADLE_USER_HOME=/home/builder/.gradle \
+    PATH=/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+SHELL ["/bin/bash", "-euxo", "pipefail", "-c"]
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git curl unzip wget xz-utils python3 make cmake ninja-build build-essential \
-    ca-certificates locales gnupg && \
-    rm -rf /var/lib/apt/lists/*
+      ca-certificates curl wget unzip zip git bash coreutils findutils \
+      make cmake ninja-build python3 xz-utils dumb-init \
+    && rm -rf /var/lib/apt/lists/*
 
-# Node & Yarn (pinned)
-RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
-    apt-get update && apt-get install -y nodejs && \
-    npm i -g yarn@1.22.22
+RUN cd /tmp && \
+    wget -O node.tar.gz "https://nodejs.org/dist/latest-v18.x/node-v${NODE_VERSION}-linux-x64.tar.gz" && \
+    echo "27a9f3f14d5e99ad05a07ed3524ba3ee92f8ff8b6db5ff80b00f9feb5ec8097a  node.tar.gz" | sha256sum -c - && \
+    tar -xf node.tar.gz -C /usr/local --strip-components=1 && rm -f node.tar.gz && \
+    corepack enable && corepack prepare yarn@3.2.0 --activate
 
-# Android SDK (cmdline-tools)
-RUN mkdir -p ${ANDROID_SDK_ROOT}/cmdline-tools && \
-    wget -O /tmp/cmdline-tools.zip \
-      https://dl.google.com/android/repository/commandlinetools-linux-${ANDROID_SDK_VERSION}_latest.zip && \
-    unzip /tmp/cmdline-tools.zip -d ${ANDROID_SDK_ROOT}/cmdline-tools && \
-    mv ${ANDROID_SDK_ROOT}/cmdline-tools/cmdline-tools ${ANDROID_SDK_ROOT}/cmdline-tools/latest && \
-    rm /tmp/cmdline-tools.zip
+ENV CMDLINE_TOOLS_ZIP=commandlinetools-linux-${ANDROID_SDK_VERSION}_latest.zip
 
-ENV PATH=$PATH:${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin:${ANDROID_SDK_ROOT}/platform-tools:${ANDROID_SDK_ROOT}/emulator
+RUN mkdir -p "${ANDROID_SDK_ROOT}/cmdline-tools" && \
+    cd /tmp && \
+    wget -O "${CMDLINE_TOOLS_ZIP}" "https://dl.google.com/android/repository/${CMDLINE_TOOLS_ZIP}" && \
+    unzip -qo "${CMDLINE_TOOLS_ZIP}" -d "${ANDROID_SDK_ROOT}/cmdline-tools" && \
+    mv "${ANDROID_SDK_ROOT}/cmdline-tools/cmdline-tools" "${ANDROID_SDK_ROOT}/cmdline-tools/latest" && \
+    rm -f "${CMDLINE_TOOLS_ZIP}"
 
-# Accept licenses and install components
-RUN yes | sdkmanager --licenses
-RUN sdkmanager \
-  "platform-tools" \
-  "platforms;${ANDROID_PLATFORM}" \
-  "build-tools;${ANDROID_BUILD_TOOLS}" \
-  "ndk;${ANDROID_NDK_VERSION}" \
-  "cmake;${CMAKE_VERSION}"
-
-# Non-root user for builds
 RUN useradd -ms /bin/bash builder && \
-    mkdir -p /home/builder /opt/.gradle && \
-    chown -R builder:builder /home/builder /opt/.gradle
+    mkdir -p /home/builder/.gradle /home/builder/.android /home/builder/.cache && \
+    chown -R builder:builder /home/builder
+
 USER builder
 WORKDIR /app
 
+RUN --mount=type=cache,target=/home/builder/.android/cache \
+    set +o pipefail && sdkmanager --sdk_root="${ANDROID_SDK_ROOT}" --licenses
+
+RUN --mount=type=cache,target=/opt/android-sdk/.android/cache \
+    sdkmanager --sdk_root="${ANDROID_SDK_ROOT}" \
+      "platform-tools" \
+      "platforms;${ANDROID_PLATFORM}" \
+      "build-tools;${ANDROID_BUILD_TOOLS}" \
+      "ndk;${ANDROID_NDK_VERSION}" \
+      "cmake;${CMAKE_VERSION}"
+
+
+
 ############################################
-# 2) Build dependencies (JS + Gradle caches)
+# 2) JS dependencies (cache-friendly)
 ############################################
 FROM toolchain AS deps
 
-# Copy package manifest and any lockfiles
-COPY --chown=builder:builder package.json yarn.lock* package-lock.json* ./
+USER builder
+WORKDIR /app
 
-# Install dependencies based on lockfile type
-RUN if [ -f yarn.lock ]; then \
-      echo "📦 Using Yarn (lockfile detected)" && \
-      yarn install --frozen-lockfile --production=false; \
-    elif [ -f package-lock.json ]; then \
-      echo "📦 Using npm (lockfile detected)" && \
-      npm ci; \
-    else \
-      echo "⚠️  No lockfile found — using npm install (non‑deterministic)" && \
-      npm install; \
-    fi
+# Copy necessary files from the local context, including the .yarn directory
+COPY --chown=builder:builder package.json yarn.lock* .yarn/ ./
 
-# Pre-warm Gradle wrapper & caches (copy minimal android files)
-COPY --chown=builder:builder android/gradle android/gradle
-COPY --chown=builder:builder android/gradle.properties android/gradle.properties
-COPY --chown=builder:builder android/gradlew android/gradlew
-RUN chmod +x android/gradlew && mkdir -p android/.gradle
+# Install React Native and the RN Gradle plugin, then install all deps
+RUN --mount=type=cache,target=/home/builder/.cache/yarn \
+    --mount=type=cache,target=/home/builder/.npm \
+    --mount=type=cache,target=/home/builder/.config/yarn \
+    yarn add react-native@0.76.9 @react-native/gradle-plugin@0.76.9 --exact \
+ && yarn install --immutable
+
+# Optional sanity check — will now succeed because RN is installed
+RUN ls -la node_modules/react-native/android
 
 
 ############################################
-# 3) App build stage (release)
+# 3) Build app
 ############################################
-FROM deps AS build
-# Copy whole project for deterministic build
-COPY --chown=builder:builder . .
-RUN chmod +x scripts/*.sh
+FROM toolchain AS build
 
-# Optional: put user-provided fonts into assets for release builds
-RUN mkdir -p android/app/src/main/assets/fonts && \
-    if [ -d "fonts" ]; then cp -r fonts/* android/app/src/main/assets/fonts/ || true; fi
+USER builder
+WORKDIR /app
 
-# Build release AAB/APK (signing handled by env/gradle if provided)
-ARG BUILD_VARIANT=Release
-ENV BUILD_VARIANT=${BUILD_VARIANT}
+# Copy deps and sources
+COPY --from=deps --chown=builder:builder /app /app
+COPY --chown=builder:builder ./android /app/android
+COPY --chown=builder:builder ./app /app/app
+COPY --chown=builder:builder ./scripts /app/scripts
+COPY --chown=builder:builder ./package.json /app/package.json
 
-# Build bundle (AAB) and APK to /app/artifacts
-RUN mkdir -p artifacts && \
-    bash scripts/build-release-aab.sh && \
-    bash scripts/build-release-apk.sh && \
-    ls -lah artifacts
+WORKDIR /app/android
+
+# Ensure wrapper is executable
+RUN chmod +x gradlew
+
+# Ensure consistent wrapper and a clean build
+RUN ./gradlew clean --no-daemon --stacktrace --info
+RUN ./gradlew wrapper --gradle-version 8.1.1 --distribution-type all
+
+# Build AAB
+RUN --mount=type=cache,target=/home/builder/.gradle/wrapper,uid=1000,gid=1000,mode=0775 \
+    --mount=type=cache,target=/home/builder/.gradle/caches,uid=1000,gid=1000,mode=0775 \
+    --mount=type=cache,target=/opt/android-sdk/.android/cache,uid=1000,gid=1000,mode=0775 \
+    ./gradlew --no-daemon --stacktrace --info :app:bundleRelease
+
+# Build APK
+RUN --mount=type=cache,target=/home/builder/.gradle/wrapper,uid=1000,gid=1000,mode=0775 \
+    --mount=type=cache,target=/home/builder/.gradle/caches,uid=1000,gid=1000,mode=0775 \
+    --mount=type=cache,target=/opt/android-sdk/.android/cache,uid=1000,gid=1000,mode=0775 \
+    ./gradlew --no-daemon --stacktrace --info :app:assembleRelease
+
+# inside build stage, after assembleRelease
+RUN mkdir -p /app/artifacts \
+    && cp app/build/outputs/bundle/release/*.aab /app/artifacts/ \
+    && cp app/build/outputs/apk/release/*.apk /app/artifacts/
+
+# after all gradle invocations
+RUN find /home/builder/.gradle/daemon -type f -name 'daemon-*.out.log' \
+      -exec sh -c 'echo "=== {} ==="; tail -n +1 "{}"' \; \
+    || true
+
+# Inspect artifacts
+RUN ls -lah artifacts
+
 
 ############################################
-# 4) Minimal artifact image (optional for CI artifacts)
+# 4) Final artifacts
 ############################################
 FROM scratch AS artifact
-COPY --from=build /app/artifacts /
+
+COPY --from=build /app/android/artifacts /artifacts

@@ -45,8 +45,11 @@ android/app/src/main/jniLibs/
 **/classes/
 **/generated/
 /openjdk-15.0.2_linux-x64_bin.tar.gz
-android/gradle-6.8.3-bin.zip
-android/gradle-8.8-bin.zip
+gradle-*-bin.zip
+OpenJDK*-jdk_x64_linux_hotspot_*.tar.gz
+# Android SDK commandline tools zip file
+commandlinetools-linux-13114758_latest.zip
+/commandlinetools-linux-*_latest
 
 # Whisper model weights (too large for Git)
 android/app/src/main/assets/models/ggml-small.bin
@@ -56,3 +59,9 @@ android/app/src/main/assets/models/ggml-small.bin
 
 # Backup files
 *~
+
+# Ignore Gradle project-specific cache directory
+.gradle
+
+# Ignore Gradle build output directory
+build

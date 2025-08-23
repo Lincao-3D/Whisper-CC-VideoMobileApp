@@ -1,13 +1,9 @@
-*.cpp text eol=lf
-*.c text eol=lf
-*.h text eol=lf
-*.sh text eol=lf
-*.gradle text eol=lf
-gradlew text eol=lf
-*.properties text eol=lf
-text eol=lf
-*.sh     text eol=lf
-*.md     text eol=lf
-*.yml    text eol=lf
+#
+# https://help.github.com/articles/dealing-with-line-endings/
+#
+# Linux start script should use lf
+/gradlew        text eol=lf
 
+# These are Windows script files and should use crlf
+*.bat           text eol=crlf
 
