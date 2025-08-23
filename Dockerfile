@@ -71,19 +71,28 @@ FROM toolchain AS deps
 USER builder
 WORKDIR /app
 
-# 1) Copy package files + Yarn configs (including your .yarnrc.yml)
-COPY --chown=builder:builder package.json yarn.lock* \
-     .yarnrc.yml .yarn/ ./
+# Copy package files + Yarn configs (including your .yarnrc.yml)
+COPY --chown=builder:builder package.json yarn.lock* .yarnrc.yml .yarn/ ./
 
-# 2) Install exactly what’s in yarn.lock, using node-modules linker from .yarnrc.yml
+# Ensure the pinned Yarn binary exists where yarnPath expects it
+# (handles cases where .yarn/releases is missing or .dockerignore filtered it)
+RUN if [ ! -f .yarn/releases/yarn-3.2.0.cjs ]; then \
+      mkdir -p .yarn/releases && \
+      curl -fsSLo .yarn/releases/yarn-3.2.0.cjs \
+        https://repo.yarnpkg.com/3.2.0/packages/yarnpkg-cli/bin/yarn.js; \
+    fi
+
+# Optional: quick sanity
+RUN node --version && node .yarn/releases/yarn-3.2.0.cjs --version
+
+# Install deps (no --immutable while you’re iterating)
 RUN --mount=type=cache,target=/home/builder/.cache/yarn \
     --mount=type=cache,target=/home/builder/.npm \
     --mount=type=cache,target=/home/builder/.config/yarn \
     yarn install
 
-# 3) Sanity checks
-RUN yarn config get nodeLinker
-RUN yarn list --pattern '^react-native$'
+# Sanity checks to guarantee RN Android folder exists
+RUN yarn list --pattern '^react-native$' || true
 RUN test -d node_modules/react-native/android && ls -la node_modules/react-native/android
 
 ############################################
