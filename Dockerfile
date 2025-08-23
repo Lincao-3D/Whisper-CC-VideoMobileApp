@@ -129,7 +129,7 @@ COPY --from=deps --chown=builder:builder /app/node_modules/@react-native/gradle-
 
 # 4) Patch the wrapper to pull Gradle 8.1.1 instead of the old 8.0
 RUN sed -i \
-  's@^distributionUrl=.*@distributionUrl=https\://services.gradle.org/distributions/gradle-8.1.1-all.zip@' \
+  's@^distributionUrl=.*@distributionUrl=https\://services.gradle.org/distributions/gradle-8.7-all.zip@' \
   android/gradle/wrapper/gradle-wrapper.properties
 
 WORKDIR /app/android

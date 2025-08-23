@@ -1,6 +1,6 @@
 plugins {
-    id("com.android.application") version "8.1.1" apply false
-    id("org.jetbrains.kotlin.android") version "1.8.10" apply false
+    id("com.android.application") version "8.5.0" apply false
+    id("org.jetbrains.kotlin.android") version "1.9.5" apply false
     id("com.facebook.react") version "0.76.9" apply false
 }
 
@@ -17,9 +17,9 @@ buildscript {
     }
     dependencies {
         // This is the crucial line that tells Gradle where to find the plugin.
-        classpath("com.android.tools.build:gradle:8.1.1")
+        classpath("com.android.tools.build:gradle:8.7.0")
         // This is where you would add other buildscript classpath dependencies.
-        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:1.8.10")
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.5")
     }
 }
 
@@ -28,7 +28,7 @@ subprojects {
     configurations.configureEach {
         resolutionStrategy.eachDependency {
             if (requested.group == "org.jetbrains.kotlin") {
-                useVersion("1.8.10")
+                useVersion("1.9.5")
             }
         }
     }
@@ -52,7 +52,7 @@ tasks.register("clean", Delete::class) {
 configurations.all {
     resolutionStrategy.eachDependency {
         if (requested.group == "org.jetbrains.kotlin") {
-            useVersion("1.8.10")
+            useVersion("1.9.5")
         }
     }
 }
