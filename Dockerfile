@@ -84,27 +84,27 @@ FROM toolchain AS deps
 USER builder
 WORKDIR /app
 
-# 1) Copy repo files (including plugin in package.json + Yarn configs)
 COPY --chown=builder:builder \
      package.json yarn.lock* .yarnrc.yml .yarn/ ./
 
-# 2) Bootstrap your pinned Yarn binary (respects yarnPath)
+# bootstrap pinned Yarn binary
 RUN if [ ! -f .yarn/releases/yarn-3.2.0.cjs ]; then \
       mkdir -p .yarn/releases && \
       curl -fsSLo .yarn/releases/yarn-3.2.0.cjs \
-        https://repo.yarnpkg.com/3.2.0/packages/yarnpkg-cli/bin/yarn.js; \
+           https://repo.yarnpkg.com/3.2.0/packages/yarnpkg-cli/bin/yarn.js; \
     fi
 
-# 3) Install everything exactly as locked
+# install exactly as locked
 RUN --mount=type=cache,target=/home/builder/.cache/yarn \
     --mount=type=cache,target=/home/builder/.npm \
     yarn install --immutable
 
-# 4) Sanity checks
+# sanity checks (using yarn why instead of yarn list)
 RUN yarn config get nodeLinker \
-    && yarn list --pattern '^react-native$' \
+    && yarn why react-native \
     && test -d node_modules/react-native/android \
     && ls -la node_modules/react-native/android
+
 
 ############################################
 # 3) Build app
@@ -123,9 +123,9 @@ COPY --chown=builder:builder ./app     /app/app
 COPY --chown=builder:builder ./scripts /app/scripts
 COPY --chown=builder:builder ./package.json /app/package.json
 
-# 3) Symlink the Gradle plugin into the path that settings.gradle expects
-RUN ln -sf node_modules/@react-native/gradle-plugin \
-      node_modules/react-native-gradle-plugin
+# MODIFIED: Replace the symbolic link with a direct copy
+# This ensures Gradle can find the directory.
+COPY --from=deps --chown=builder:builder /app/node_modules/@react-native/gradle-plugin /app/node_modules/react-native-gradle-plugin
 
 # 4) Patch the wrapper to pull Gradle 8.1.1 instead of the old 8.0
 RUN sed -i \
