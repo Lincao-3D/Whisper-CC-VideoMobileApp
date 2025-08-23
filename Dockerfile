@@ -89,6 +89,10 @@ WORKDIR /app
 # Copy package files + Yarn configs (including your .yarnrc.yml)
 COPY --chown=builder:builder package.json yarn.lock* .yarnrc.yml .yarn/ ./
 
+# Add react-native-gradle-plugin specifically pinned to 0.76.9 to ensure node_modules presence
+RUN yarn add --exact @react-native/gradle-plugin@0.76.9
+RUN yarn install
+# ¡please, verify if it is correct to install here and then reinstall down below!
 
 # Ensure the pinned Yarn binary exists where yarnPath expects it
 # (handles cases where .yarn/releases is missing or .dockerignore filtered it)
@@ -102,9 +106,6 @@ RUN if [ ! -f .yarn/releases/yarn-3.2.0.cjs ]; then \
 # Optional: quick sanity
 RUN node --version && node .yarn/releases/yarn-3.2.0.cjs --version
 
-
-# Add react-native-gradle-plugin specifically pinned to 0.76.9 to ensure node_modules presence
-RUN yarn add --exact @react-native/gradle-plugin@0.76.9
 
 # Now (re)install all dependencies
 RUN --mount=type=cache,target=/home/builder/.cache/yarn \
@@ -123,65 +124,59 @@ RUN test -d node_modules/react-native/android && ls -la node_modules/react-nativ
 ############################################
 FROM toolchain AS build
 
-
 USER builder
 WORKDIR /app
 
-
-# Bring in node_modules and lockfiles from deps stage first (best cache hit)
+# 1) Bring in the full JS install (with node_modules + plugin)
 COPY --from=deps --chown=builder:builder /app /app
 
-
-# Now copy the app sources
+# 2) Copy your native sources
 COPY --chown=builder:builder ./android /app/android
-COPY --chown=builder:builder ./app /app/app
+COPY --chown=builder:builder ./app     /app/app
 COPY --chown=builder:builder ./scripts /app/scripts
 COPY --chown=builder:builder ./package.json /app/package.json
-# If you have metro/babel/ts configs etc., copy them as needed:
-# COPY --chown=builder:builder ./babel.config.js ./metro.config.js ./tsconfig.json /app/
 
+# 3) Symlink the Gradle plugin into the path that settings.gradle expects
+RUN ln -sf node_modules/@react-native/gradle-plugin \
+      node_modules/react-native-gradle-plugin
+
+# 4) Patch the wrapper to pull Gradle 8.1.1 instead of the old 8.0
+RUN sed -i \
+  's@^distributionUrl=.*@distributionUrl=https\://services.gradle.org/distributions/gradle-8.1.1-all.zip@' \
+  android/gradle/wrapper/gradle-wrapper.properties
 
 WORKDIR /app/android
 
-
-# Ensure wrapper is executable
+# 5) Ensure the wrapper is executable
 RUN chmod +x gradlew
 
-
-# Force the Gradle wrapper to 8.1.1 before cleaning
-RUN ./gradlew wrapper --gradle-version 8.1.1 --distribution-type all
-
-# Clean using the updated wrapper
+# 6) Clean & build with the now-fixed wrapper
 RUN ./gradlew clean --no-daemon --stacktrace --info
 
-
-# Build AAB
+# AAB
 RUN --mount=type=cache,target=/home/builder/.gradle/wrapper,uid=1000,gid=1000,mode=0775 \
     --mount=type=cache,target=/home/builder/.gradle/caches,uid=1000,gid=1000,mode=0775 \
     --mount=type=cache,target=/opt/android-sdk/.android/cache,uid=1000,gid=1000,mode=0775 \
     ./gradlew --no-daemon --stacktrace --info :app:bundleRelease
 
-
-# Build APK
+# APK
 RUN --mount=type=cache,target=/home/builder/.gradle/wrapper,uid=1000,gid=1000,mode=0775 \
     --mount=type=cache,target=/home/builder/.gradle/caches,uid=1000,gid=1000,mode=0775 \
     --mount=type=cache,target=/opt/android-sdk/.android/cache,uid=1000,gid=1000,mode=0775 \
     ./gradlew --no-daemon --stacktrace --info :app:assembleRelease
 
-
-# Collect artifacts consistently under /app/android/artifacts
+# 7) Collect artifacts
 RUN mkdir -p /app/android/artifacts \
     && cp app/build/outputs/bundle/release/*.aab /app/android/artifacts/ \
-    && cp app/build/outputs/apk/release/*.apk /app/android/artifacts/
+    && cp app/build/outputs/apk/release/*.apk    /app/android/artifacts/
 
-
-# Show Gradle daemon logs if present (non-fatal)
+# Optional: dump daemon logs
 RUN find /home/builder/.gradle/daemon -type f -name 'daemon-*.out.log' \
       -exec sh -c 'echo "=== {} ==="; tail -n +1 "{}"' \; || true
 
-
-# Inspect artifacts
+# Inspect
 RUN ls -lah /app/android/artifacts
+
 
 
 ############################################
