@@ -24,7 +24,7 @@ ensure-model:
 > fi
 
 release: ensure-model
-> docker build -t autocap-mobile . --no-cache
+> docker build -t autocap-mobile .
 > docker run --rm \
 >   -v $$(pwd):/app \
 >   -v $$(pwd)/fonts:/app/fonts \

@@ -117,17 +117,24 @@ WORKDIR /app
 # 1) Bring in the full JS install (with node_modules + plugin)
 COPY --from=deps --chown=builder:builder /app /app
 
-# 2) Copy your native sources
+# 2) Copy your native sources (minus wrapper file, if missing locally)
 COPY --chown=builder:builder ./android /app/android
 COPY --chown=builder:builder ./app     /app/app
 COPY --chown=builder:builder ./scripts /app/scripts
 COPY --chown=builder:builder ./package.json /app/package.json
 
-# MODIFIED: Replace the symbolic link with a direct copy
-# This ensures Gradle can find the directory.
-COPY --from=deps --chown=builder:builder /app/node_modules/@react-native/gradle-plugin /app/node_modules/react-native-gradle-plugin
+# 3) Replace the symbolic link with a direct copy
+COPY --from=deps --chown=builder:builder \
+    /app/node_modules/@react-native/gradle-plugin \
+    /app/node_modules/react-native-gradle-plugin
 
-# 4) Patch the wrapper to pull Gradle 8.1.1 instead of the old 8.0
+# 4) Ensure gradle-wrapper.properties exists by copying from deps stage
+#    (React Native ships its own wrapper inside node_modules)
+COPY --from=deps --chown=builder:builder \
+    /app/node_modules/react-native/android/gradle/wrapper/gradle-wrapper.properties \
+    /app/android/gradle/wrapper/gradle-wrapper.properties
+
+# 5) Patch the wrapper to use Gradle 8.7
 RUN sed -i \
   's@^distributionUrl=.*@distributionUrl=https\://services.gradle.org/distributions/gradle-8.7-all.zip@' \
   android/gradle/wrapper/gradle-wrapper.properties
