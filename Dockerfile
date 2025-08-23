@@ -81,43 +81,30 @@ RUN --mount=type=cache,target=/opt/android-sdk/.android/cache \
 ############################################
 FROM toolchain AS deps
 
-
 USER builder
 WORKDIR /app
 
+# 1) Copy repo files (including plugin in package.json + Yarn configs)
+COPY --chown=builder:builder \
+     package.json yarn.lock* .yarnrc.yml .yarn/ ./
 
-# Copy package files + Yarn configs (including your .yarnrc.yml)
-COPY --chown=builder:builder package.json yarn.lock* .yarnrc.yml .yarn/ ./
-
-# Add react-native-gradle-plugin specifically pinned to 0.76.9 to ensure node_modules presence
-RUN yarn add --exact @react-native/gradle-plugin@0.76.9
-RUN yarn install
-# ¡please, verify if it is correct to install here and then reinstall down below!
-
-# Ensure the pinned Yarn binary exists where yarnPath expects it
-# (handles cases where .yarn/releases is missing or .dockerignore filtered it)
+# 2) Bootstrap your pinned Yarn binary (respects yarnPath)
 RUN if [ ! -f .yarn/releases/yarn-3.2.0.cjs ]; then \
       mkdir -p .yarn/releases && \
       curl -fsSLo .yarn/releases/yarn-3.2.0.cjs \
         https://repo.yarnpkg.com/3.2.0/packages/yarnpkg-cli/bin/yarn.js; \
     fi
 
-
-# Optional: quick sanity
-RUN node --version && node .yarn/releases/yarn-3.2.0.cjs --version
-
-
-# Now (re)install all dependencies
+# 3) Install everything exactly as locked
 RUN --mount=type=cache,target=/home/builder/.cache/yarn \
     --mount=type=cache,target=/home/builder/.npm \
-    --mount=type=cache,target=/home/builder/.config/yarn \
-    yarn install
+    yarn install --immutable
 
-
-# Sanity checks to guarantee RN Android folder exists
-RUN yarn list --pattern '^react-native$' || true
-RUN test -d node_modules/react-native/android && ls -la node_modules/react-native/android
-
+# 4) Sanity checks
+RUN yarn config get nodeLinker \
+    && yarn list --pattern '^react-native$' \
+    && test -d node_modules/react-native/android \
+    && ls -la node_modules/react-native/android
 
 ############################################
 # 3) Build app
