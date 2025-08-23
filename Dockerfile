@@ -93,7 +93,7 @@ RUN yarn config get nodeLinker \
     && ls -la node_modules/react-native/android
 
 # DEBUG: find the real wrapper location
-RUN find /app/node_modules/react-native -type f -name gradle-wrapper.properties -exec dirname {} \;
+# RUN find /app/node_modules/react-native -type f -name gradle-wrapper.properties -exec dirname {} \;
 
 ############################################
 # 3) Build app
@@ -117,14 +117,13 @@ COPY --from=deps --chown=builder:builder \
   /app/node_modules/@react-native/gradle-plugin \
   /app/node_modules/react-native-gradle-plugin
 
-# 4) Copy the *actual* wrapper from React Native’s ReactAndroid folder
+# 4) Ensure wrapper folder exists, then copy the actual wrapper file
 RUN mkdir -p /app/android/gradle/wrapper
-
 COPY --from=deps --chown=builder:builder \
-  /app/node_modules/react-native/android/gradle/wrapper/gradle-wrapper.properties \
+  /app/node_modules/react-native/ReactAndroid/gradle/wrapper/gradle-wrapper.properties \
   /app/android/gradle/wrapper/gradle-wrapper.properties
 
-# 5) Patch to Gradle 8.7
+# 5) Patch wrapper to use Gradle 8.7 distribution
 RUN sed -i \
   's@^distributionUrl=.*@distributionUrl=https\://services.gradle.org/distributions/gradle-8.7-all.zip@' \
   /app/android/gradle/wrapper/gradle-wrapper.properties
@@ -132,7 +131,7 @@ RUN sed -i \
 WORKDIR /app/android
 RUN chmod +x gradlew
 
-# 6) Clean & build with the now-fixed wrapper
+# 6) Clean and build using the updated wrapper
 RUN ./gradlew clean --no-daemon --stacktrace --info
 
 # AAB
