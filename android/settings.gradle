@@ -1,24 +1,29 @@
 pluginManagement {
-  repositories {
-    google()
-    mavenCentral()
-    gradlePluginPortal()
-    maven { url("$rootDir/../node_modules/react-native/android") }
-  }
-  resolutionStrategy {
-    eachPlugin {
-      if (requested.id.id == "com.facebook.react") {
-        // force it to use version 0.76.9 from the above maven
-        useModule("com.facebook.react:react-native-gradle-plugin:0.76.9")
-      }
-      if (requested.id.id.startsWith("org.jetbrains.kotlin")) {
-        // bump the Kotlin DSL plugin to 1.8.10 so compiler + runtime match
-        useVersion("1.9.5")
-      }
+    repositories {
+        // 1. Try the Gradle Plugin Portal first (needed for org.jetbrains.kotlin.android)
+        gradlePluginPortal()
+
+        // 2. Android + JVM ecosystem
+        google()
+        mavenCentral()
+
+        // 3. Your local React-Native Android artifacts
+        maven {
+            url = uri("$rootDir/../node_modules/react-native/android")
+        }
     }
-  }
+
+    resolutionStrategy {
+        eachPlugin {
+            if (requested.id == "org.jetbrains.kotlin.android") {
+                useModule("org.jetbrains.kotlin:kotlin-gradle-plugin:${requested.version}")
+            }
+            if (requested.id == "com.facebook.react") {
+                useModule("com.facebook.react:react-native-gradle-plugin:${requested.version}")
+            }
+        }
+    }
 }
 
-includeBuild("../node_modules/react-native-gradle-plugin")
-
-include ':app'
+rootProject.name = "autocapMobile"
+include(":app")

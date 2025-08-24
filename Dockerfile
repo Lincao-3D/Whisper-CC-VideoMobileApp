@@ -119,11 +119,14 @@ COPY --from=deps --chown=builder:builder \
   /app/node_modules/@react-native/gradle-plugin \
   /app/node_modules/react-native-gradle-plugin
 
-# 4) Generate Gradle wrapper at desired version
+# 4) Generate Gradle wrapper (no system install of Gradle)
 WORKDIR /app/android
-RUN gradle --no-daemon wrapper --gradle-version 8.7 --distribution-type all
+RUN curl -fsSLo /tmp/gradle.zip https://services.gradle.org/distributions/gradle-7.6.4-bin.zip \
+ && unzip -q /tmp/gradle.zip -d /tmp \
+ && /tmp/gradle-7.6.4/bin/gradle --no-daemon wrapper --gradle-version 8.7 --distribution-type all \
+ && rm -rf /tmp/gradle-7.6.4 /tmp/gradle.zip
 
-# 5) Ensure wrapper is executable
+# 5) Verify wrapper
 RUN chmod +x gradlew && ./gradlew --version
 
 # 6) Clean and build
@@ -140,12 +143,13 @@ RUN mkdir -p /app/android/artifacts \
     && cp app/build/outputs/bundle/release/*.aab /app/android/artifacts/ \
     && cp app/build/outputs/apk/release/*.apk    /app/android/artifacts/
 
-# Optional: dump daemon logs for debugging
+# Optional: dump daemon logs
 RUN find /home/builder/.gradle/daemon -type f -name 'daemon-*.out.log' \
       -exec sh -c 'echo "=== {} ==="; tail -n +1 "{}"' \; || true
 
 # Inspect
 RUN ls -lah /app/android/artifacts
+
 
 ############################################
 # 4) Final artifacts
