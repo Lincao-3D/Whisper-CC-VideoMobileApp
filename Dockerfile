@@ -78,8 +78,8 @@ COPY --chown=builder:builder \
 RUN if [ ! -f .yarn/releases/yarn-3.2.0.cjs ]; then \
       mkdir -p .yarn/releases && \
       curl -fsSLo .yarn/releases/yarn-3.2.0.cjs \
-           https://repo.yarnpkg.com/3.2.0/packages/yarnpkg-cli/bin/yarn.js; \
-    fi
+        https://repo.yarnpkg.com/3.2.0/packages/yarnpkg-cli/bin/yarn.js; \
+      fi
 
 # install exactly as locked
 RUN --mount=type=cache,target=/home/builder/.cache/yarn \
@@ -96,9 +96,9 @@ RUN yarn config get nodeLinker \
 RUN WRAPPER_PATH=$(find /app/node_modules/react-native -type f -name gradle-wrapper.properties -exec dirname {} \;) && \
     echo "Found wrapper location: $WRAPPER_PATH"
 
-RUN ./gradlew wrapper --gradle-version 8.7
+# RUN ./gradlew wrapper --gradle-version 8.7
 ############################################
-# 3) Build app
+# 3) Build app (self-contained Gradle wrapper)
 ############################################
 FROM toolchain AS build
 
@@ -108,47 +108,39 @@ WORKDIR /app
 # 1) JS + node_modules
 COPY --from=deps --chown=builder:builder /app /app
 
-# 2) Your native folders
+# 2) Native folders
 COPY --chown=builder:builder ./android  /app/android
 COPY --chown=builder:builder ./app      /app/app
 COPY --chown=builder:builder ./scripts  /app/scripts
 COPY --chown=builder:builder ./package.json /app/package.json
 
-# 3) Materialize the RN Gradle plugin folder expected by settings.gradle
+# 3) Materialize the RN Gradle plugin folder
 COPY --from=deps --chown=builder:builder \
   /app/node_modules/@react-native/gradle-plugin \
   /app/node_modules/react-native-gradle-plugin
 
-# Navigate to the Android directory
+# 4) Generate Gradle wrapper at desired version
 WORKDIR /app/android
-
-# 4) Generate a fresh wrapper at the required Gradle version
-#    (uses system Gradle just for this step)
 RUN gradle --no-daemon wrapper --gradle-version 8.7 --distribution-type all
 
-# 5) Use the wrapper from here on out
-RUN chmod +x gradlew \
- && ./gradlew --version \
- && ./gradlew clean --no-daemon --stacktrace --info
+# 5) Ensure wrapper is executable
+RUN chmod +x gradlew && ./gradlew --version
 
-# AAB
+# 6) Clean and build
+RUN ./gradlew clean --no-daemon --stacktrace --info
+
+# 7) Build AAB + APK with caching
 RUN --mount=type=cache,target=/home/builder/.gradle/wrapper,uid=1000,gid=1000,mode=0775 \
     --mount=type=cache,target=/home/builder/.gradle/caches,uid=1000,gid=1000,mode=0775 \
     --mount=type=cache,target=/opt/android-sdk/.android/cache,uid=1000,gid=1000,mode=0775 \
-    ./gradlew --no-daemon --stacktrace --info :app:bundleRelease
+    ./gradlew --no-daemon --stacktrace --info :app:bundleRelease :app:assembleRelease
 
-# APK
-RUN --mount=type=cache,target=/home/builder/.gradle/wrapper,uid=1000,gid=1000,mode=0775 \
-    --mount=type=cache,target=/home/builder/.gradle/caches,uid=1000,gid=1000,mode=0775 \
-    --mount=type=cache,target=/opt/android-sdk/.android/cache,uid=1000,gid=1000,mode=0775 \
-    ./gradlew --no-daemon --stacktrace --info :app:assembleRelease
-
-# 7) Collect artifacts
+# 8) Collect artifacts
 RUN mkdir -p /app/android/artifacts \
     && cp app/build/outputs/bundle/release/*.aab /app/android/artifacts/ \
     && cp app/build/outputs/apk/release/*.apk    /app/android/artifacts/
 
-# Optional: dump daemon logs
+# Optional: dump daemon logs for debugging
 RUN find /home/builder/.gradle/daemon -type f -name 'daemon-*.out.log' \
       -exec sh -c 'echo "=== {} ==="; tail -n +1 "{}"' \; || true
 
