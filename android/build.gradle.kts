@@ -1,6 +1,6 @@
 plugins {
     id("com.android.application") version "8.5.0" apply false
-    id("org.jetbrains.kotlin.android") version "1.9.5" apply false
+    // id("org.jetbrains.kotlin.android") version "1.9.5" apply false
     id("com.facebook.react") version "0.76.9" apply false
 }
 
